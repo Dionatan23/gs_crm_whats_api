@@ -6,7 +6,7 @@ class WhatsAppService {
   async connect(sessionId: string) {
     const existingSession = sessionManager.getSession(sessionId);
 
-    if (existingSession) {
+    if (existingSession && existingSession.status === "connected") {
       return existingSession;
     }
 
