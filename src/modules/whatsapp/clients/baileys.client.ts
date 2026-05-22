@@ -1,69 +1,96 @@
 import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
-  useMultiFileAuthState
-} from '@whiskeysockets/baileys'
+  useMultiFileAuthState,
+} from "@whiskeysockets/baileys";
 
-import path from 'path'
-import sessionManager from '../managers/session.manager.js'
+import path from "path";
 
+import { Boom } from "@hapi/boom";
 
+import sessionManager from "../managers/session.manager.js";
 
-export async function createWhatsAppConnection(
-  sessionId: string
-) {
-  const sessionPath = path.resolve(
-    'sessions',
-    sessionId
-  )
+export async function createWhatsAppConnection(sessionId: string) {
+  const existingSession = sessionManager.getSession(sessionId);
 
-  const { state, saveCreds } =
-    await useMultiFileAuthState(sessionPath)
+  if (existingSession?.status === "connected") {
+    return existingSession.socket;
+  }
 
-  const { version } =
-    await fetchLatestBaileysVersion()
+  const sessionPath = path.resolve("sessions", sessionId);
+
+  const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+
+  const { version } = await fetchLatestBaileysVersion();
 
   const socket = makeWASocket({
     version,
     auth: state,
-  })
+  });
 
   sessionManager.createSession({
     sessionId,
     socket,
     qr: null,
-    status: 'connecting'
-  })
+    status: "connecting",
+    reconnectAttempts: 0,
+  });
 
-  socket.ev.on('creds.update', saveCreds)
+  socket.ev.on("creds.update", saveCreds);
 
-  socket.ev.on('connection.update', update => {
-    const { connection, qr } = update
+  socket.ev.on("connection.update", async (update) => {
+    const { connection, qr, lastDisconnect } = update;
 
     if (qr) {
       sessionManager.updateSession(sessionId, {
         qr,
-        status: 'qr_pending'
-      })
+        status: "qr_pending",
+      });
     }
 
-    if (connection === 'open') {
-      console.log('✅ WhatsApp connected')
+    if (connection === "connecting") {
+      console.log("🟡 Connecting...");
+
+      sessionManager.setStatus(sessionId, "connecting");
+    }
+
+    if (connection === "open") {
+      console.log("✅ WhatsApp connected");
 
       sessionManager.updateSession(sessionId, {
-        status: 'connected',
-        qr: null
-      })
+        status: "connected",
+        qr: null,
+        reconnectAttempts: 0,
+        lastConnectedAt: new Date(),
+      });
     }
 
-    if (connection === 'close') {
-      console.log('❌ WhatsApp disconnected')
+    if (connection === "close") {
+      const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
 
-      sessionManager.updateSession(sessionId, {
-        status: 'disconnected'
-      })
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+
+      console.log("❌ Connection closed:", statusCode);
+
+      if (shouldReconnect) {
+        console.log("🟠 Reconnecting...");
+
+        sessionManager.updateSession(sessionId, {
+          status: "reconnecting",
+        });
+
+        setTimeout(() => {
+          createWhatsAppConnection(sessionId);
+        }, 5000);
+      } else {
+        console.log("🔴 Session logged out");
+
+        sessionManager.updateSession(sessionId, {
+          status: "disconnected",
+        });
+      }
     }
-  })
+  });
 
-  return socket
+  return socket;
 }

@@ -11,19 +11,35 @@ class SessionManager {
     return this.sessions.get(sessionId);
   }
 
+  getAllSessions() {
+    return Array.from(this.sessions.values());
+  }
+
   updateSession(sessionId: string, data: Partial<WhatsAppSession>) {
     const session = this.sessions.get(sessionId);
 
     if (!session) return;
 
-    this.sessions.set(sessionId, {
+    const updatedSession = {
       ...session,
       ...data,
-    });
+    };
+
+    this.sessions.set(sessionId, updatedSession);
   }
 
   removeSession(sessionId: string) {
     this.sessions.delete(sessionId);
+  }
+
+  setStatus(sessionId: string, status: WhatsAppSession["status"]) {
+    const session = this.sessions.get(sessionId);
+
+    if (!session) return;
+
+    session.status = status;
+
+    this.sessions.set(sessionId, session);
   }
 }
 

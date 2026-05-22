@@ -1,15 +1,18 @@
-import { WASocket } from '@whiskeysockets/baileys'
+import { WASocket } from "@whiskeysockets/baileys";
 
 export type SessionStatus =
-  | 'connecting'
-  | 'connected'
-  | 'disconnected'
-  | 'qr_pending'
-  | 'reconnecting'
+  | "connecting"
+  | "connected"
+  | "disconnected"
+  | "qr_pending"
+  | "reconnecting";
 
 export interface WhatsAppSession {
-  sessionId: string
-  socket: WASocket | null
-  qr: string | null
-  status: SessionStatus
+  sessionId: string;
+  socket: WASocket | null;
+  qr: string | null;
+  status: SessionStatus;
+  phone?: string;
+  reconnectAttempts: number;
+  lastConnectedAt?: Date;
 }
