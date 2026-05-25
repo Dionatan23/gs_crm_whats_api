@@ -8,6 +8,10 @@ export async function handleMessagesUpsert(messages: WAMessage[]) {
       continue;
     }
 
+    if (message.key.fromMe) {
+      continue;
+    }
+
     const extractPhone = (message: WAMessage) => {
       const jid =
         message.key.remoteJidAlt ||
@@ -31,8 +35,8 @@ export async function handleMessagesUpsert(messages: WAMessage[]) {
     conversationService.saveMessage({
       phone,
       message: text,
-      timestamp: new Date(),
-      type: "incoming",
+      direction: "inbound",
+      status: "received",
     });
   }
 }

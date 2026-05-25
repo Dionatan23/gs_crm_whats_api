@@ -1,4 +1,5 @@
 import sessionManager from "../managers/session.manager.js";
+import conversationService from "./conversation.service.js";
 
 class MessageService {
   async sendTextMessage(sessionId: string, phone: string, message: string) {
@@ -20,7 +21,7 @@ class MessageService {
 
     const exists = await session.socket.onWhatsApp(jid);
     console.log(exists);
-    
+
     if (!exists || exists.length === 0) {
       throw new Error("Phone number is not on WhatsApp");
     }
@@ -29,6 +30,13 @@ class MessageService {
     try {
       const response = await session.socket.sendMessage(formattedPhone, {
         text: message,
+      });
+
+      conversationService.saveMessage({
+        phone,
+        message,
+        direction: "outbound",
+        status: "sent",
       });
 
       console.log({

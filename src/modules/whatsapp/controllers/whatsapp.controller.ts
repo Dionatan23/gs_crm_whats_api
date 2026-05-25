@@ -78,7 +78,7 @@ class WhatsAppController {
   async messages(req: Request, res: Response) {
     return res.json({
       success: true,
-      data: conversationService.getMessages(),
+      data: conversationService.getAll(),
     });
   }
 }
