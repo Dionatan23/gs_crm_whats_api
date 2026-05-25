@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import QRCode from "qrcode";
 
 import whatsappService from "../services/whatsapp.service.js";
+import conversationService from "../services/conversation.service.js";
 
 class WhatsAppController {
   async connect(req: Request, res: Response) {
@@ -72,6 +73,13 @@ class WhatsAppController {
         error: error instanceof Error ? error.message : "Internal server error",
       });
     }
+  }
+
+  async messages(req: Request, res: Response) {
+    return res.json({
+      success: true,
+      data: conversationService.getMessages(),
+    });
   }
 }
 

@@ -3,6 +3,7 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   useMultiFileAuthState,
 } from "@whiskeysockets/baileys";
+import { handleMessagesUpsert } from "../events/messages.event.js";
 
 import path from "path";
 
@@ -38,6 +39,9 @@ export async function createWhatsAppConnection(sessionId: string) {
 
   socket.ev.on("creds.update", saveCreds);
 
+  socket.ev.on("messages.upsert", async ({ messages }) => {
+    await handleMessagesUpsert(messages);
+  });
   socket.ev.on("connection.update", async (update) => {
     const { connection, qr, lastDisconnect } = update;
 

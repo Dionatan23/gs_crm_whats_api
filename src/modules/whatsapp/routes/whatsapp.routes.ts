@@ -10,4 +10,6 @@ router.get("/status", whatsappController.status);
 
 router.get("/qr", whatsappController.qr);
 
+router.get("/messages", whatsappController.messages);
+
 export default router;
