@@ -9,4 +9,12 @@ router.get("/conversations", async (_req, res) => {
   res.json(conversations);
 });
 
+router.get("/conversations/:phone", async (req, res) => {
+  const messages = await ConversationService.getByPhone(
+    req.params.phone
+  );
+
+  res.json(messages);
+});
+
 export default router;

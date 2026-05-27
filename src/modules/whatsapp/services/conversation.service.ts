@@ -17,23 +17,18 @@ class ConversationService {
       INSERT INTO messages (phone, message, direction, status)
       VALUES (?, ?, ?, ?)
       `,
-      [
-        data.phone,
-        data.message,
-        data.direction,
-        data.status || "received"
-      ],
+      [data.phone, data.message, data.direction, data.status || "received"],
       (err) => {
         if (err) {
           console.error("Erro ao salvar mensagem:", err.message);
         }
-      }
+      },
     );
 
     console.log({
       type: "MESSAGE_RECEIVED",
       phone: data.phone,
-      message: data.message
+      message: data.message,
     });
   }
 
@@ -49,7 +44,25 @@ class ConversationService {
         (err, rows) => {
           if (err) reject(err);
           else resolve(rows as ConversationMessage[]);
-        }
+        },
+      );
+    });
+  }
+
+  getByPhone(phone: string): Promise<ConversationMessage[]> {
+    return new Promise((resolve, reject) => {
+      db.all(
+        `
+      SELECT phone, message, direction, status, created_at
+      FROM messages
+      WHERE phone = ?
+      ORDER BY created_at ASC
+      `,
+        [phone],
+        (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows as ConversationMessage[]);
+        },
       );
     });
   }
