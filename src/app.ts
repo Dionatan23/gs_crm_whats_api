@@ -8,6 +8,8 @@ import conversationRoutes from "./modules/whatsapp/routes/conversation.routes.js
 import healthRoutes from "./shared/routes/health.routes.js";
 import { schedulerService } from "./modules/whatsapp/automation/service/scheduler.service.js";
 import automationRoutes from "./modules/whatsapp/automation/routes/automation.routes.js";
+import metricsRoutes from "./modules/metrics/routes/metrics.routes.js";
+
 
 const app = express();
 
@@ -17,7 +19,7 @@ schedulerService.start();
 app.use(express.json());
 
 app.use("/health", healthRoutes);
-
+app.use("/api/metrics", metricsRoutes);
 app.use("/whatsapp", whatsappRoutes);
 
 app.use("/messages", messageRoutes);
