@@ -6,6 +6,8 @@ class AutomationService {
   // CRUD
   // =========================
 
+  private readonly runningAutomations = new Set<number>();
+
   async create(data: any) {
     return new Promise((resolve, reject) => {
       db.run(
@@ -187,6 +189,18 @@ class AutomationService {
     });
   }
 
+  isWindowExpired(automation: any): boolean {
+    const now = new Date();
+
+    const [endHour, endMinute] = automation.end_time.split(":").map(Number);
+
+    const end = new Date();
+
+    end.setHours(endHour, endMinute, 0, 0);
+
+    return now > end;
+  }
+
   isWithinExecutionWindow(automation: any) {
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
@@ -204,20 +218,44 @@ class AutomationService {
   }
 
   async executeAutomation(automation: any) {
+    if (this.runningAutomations.has(automation.id)) {
+      console.log(`⏭️ Automação ${automation.id} já está rodando`);
+      return;
+    }
+
+    this.runningAutomations.add(automation.id);
+
     try {
-      console.log(`Executando automação ${automation.name}`);
+      console.log(`🚀 Executando automação ${automation.id}`);
 
       const leads = await this.getPendingAutomationLeads(automation.id);
 
-      for (const lead of leads as any[]) {
-        const delay = this.randomDelay(
-          automation.min_delay,
-          automation.max_delay,
+      if (!leads || !(leads as any[]).length) {
+        console.log(
+          `🏁 Automação ${automation.id} finalizada: sem leads pendentes`,
         );
 
-        await this.sleep(delay * 1000);
+        await this.finishAutomation(automation.id);
 
+        return true;
+      }
+
+      for (const lead of leads as any[]) {
         try {
+          console.log(`➡️ Reservando lead ${lead.phone}`);
+
+          // trava imediatamente
+          await this.markLeadAsProcessing(lead.id);
+
+          const delay = this.randomDelay(
+            automation.min_delay,
+            automation.max_delay,
+          );
+
+          console.log(`⏳ Aguardando ${delay}s para ${lead.phone}`);
+
+          await this.sleep(delay * 1000);
+
           await messageService.sendTextMessage(
             automation.session_id,
             lead.phone,
@@ -227,6 +265,8 @@ class AutomationService {
           await this.markLeadAsSent(lead.id);
 
           await this.logExecution(automation.id, lead.phone, "SUCCESS");
+
+          console.log(`✅ Lead enviado: ${lead.phone}`);
         } catch (error: any) {
           await this.markLeadAsFailed(lead.id, error.message);
 
@@ -236,11 +276,37 @@ class AutomationService {
             "FAILED",
             error.message,
           );
+
+          console.error(
+            `❌ Falha ao enviar para ${lead.phone}:`,
+            error.message,
+          );
         }
       }
-    } catch (error) {
-      console.error("Erro ao executar automação:", error);
+      return true;
+    } finally {
+      this.runningAutomations.delete(automation.id);
     }
+  }
+
+  async finishAutomation(automationId: number): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      db.run(
+        `
+      UPDATE automations
+      SET active = 0
+      WHERE id = ?
+      `,
+        [automationId],
+        function (err) {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(true);
+          }
+        },
+      );
+    });
   }
 
   async getPendingAutomationLeads(automationId: number): Promise<any[]> {
@@ -260,16 +326,14 @@ class AutomationService {
     });
   }
 
-  async markLeadAsSent(leadId: number) {
+  async markLeadAsProcessing(leadId: number) {
     return new Promise((resolve, reject) => {
       db.run(
         `
-        UPDATE automation_leads
-        SET
-          execution_status = 'sent',
-          sent_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-        `,
+      UPDATE automation_leads
+      SET execution_status = 'processing'
+      WHERE id = ?
+      `,
         [leadId],
         (err) => {
           if (err) reject(err);
@@ -279,17 +343,33 @@ class AutomationService {
     });
   }
 
-  async markLeadAsFailed(leadId: number, errorMessage: string) {
+  async markLeadAsSent(leadId: number) {
     return new Promise((resolve, reject) => {
       db.run(
         `
-        UPDATE automation_leads
-        SET
-          execution_status = 'failed',
+      UPDATE automation_leads
+      SET execution_status = 'sent'
+      WHERE id = ?
+      `,
+        [leadId],
+        (err) => {
+          if (err) reject(err);
+          else resolve(true);
+        },
+      );
+    });
+  }
+
+  async markLeadAsFailed(leadId: number, error: string) {
+    return new Promise((resolve, reject) => {
+      db.run(
+        `
+      UPDATE automation_leads
+      SET execution_status = 'failed',
           error_message = ?
-        WHERE id = ?
-        `,
-        [errorMessage, leadId],
+      WHERE id = ?
+      `,
+        [error, leadId],
         (err) => {
           if (err) reject(err);
           else resolve(true);

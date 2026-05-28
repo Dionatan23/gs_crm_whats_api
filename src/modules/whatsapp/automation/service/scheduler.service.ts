@@ -8,7 +8,8 @@ class SchedulerService {
       console.log("🔍 Verificando automações...");
 
       try {
-        const automations = (await automationService.listActiveAutomations()) as any[];
+        const automations =
+          (await automationService.listActiveAutomations()) as any[];
 
         console.log(`📌 ${automations.length} automações ativas encontradas`);
 
@@ -23,11 +24,22 @@ class SchedulerService {
           if (canExecute) {
             console.log(`✅ Executando automação: ${automation.name}`);
 
-            await automationService.executeAutomation(automation);
+            const executed =
+              await automationService.executeAutomation(automation);
 
-            console.log(`🎯 Automação concluída: ${automation.name}`);
+            if (executed) {
+              console.log(`🎯 Automação concluída: ${automation.name}`);
+            }
           } else {
-            console.log(`⏳ Fora da janela de execução: ${automation.name}`);
+            if (automationService.isWindowExpired(automation)) {
+              console.log(`⏰ Automação expirada: ${automation.name}`);
+
+              await automationService.finishAutomation(automation.id);
+            } else {
+              console.log(
+                `⏳ Aguardando janela de execução: ${automation.name}`,
+              );
+            }
           }
         }
       } catch (error: any) {
