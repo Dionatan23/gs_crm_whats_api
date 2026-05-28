@@ -294,7 +294,8 @@ class AutomationService {
       db.run(
         `
       UPDATE automations
-      SET active = 0
+      SET active = 0,
+          status = 'concluida'
       WHERE id = ?
       `,
         [automationId],

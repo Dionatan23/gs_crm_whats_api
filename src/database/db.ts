@@ -47,6 +47,7 @@ db.serialize(() => {
     name TEXT NOT NULL,
     lead_type TEXT NOT NULL,
     session_id TEXT,
+    status TEXT DEFAULT 'ativa',
     active INTEGER DEFAULT 1,
     start_time TEXT,
     end_time TEXT,
