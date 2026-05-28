@@ -12,7 +12,7 @@ export class MetricsService {
         paused: `
           SELECT COUNT(*) as total
           FROM automations
-          WHERE active = 0
+          WHERE status = 'pausada'
         `,
         completed: `
           SELECT COUNT(*) as total

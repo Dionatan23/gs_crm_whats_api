@@ -18,14 +18,14 @@ schedulerService.start();
 
 app.use(express.json());
 
-app.use("/health", healthRoutes);
+app.use("/api/health", healthRoutes);
 app.use("/api/metrics", metricsRoutes);
-app.use("/whatsapp", whatsappRoutes);
+app.use("/api/whatsapp", whatsappRoutes);
 
-app.use("/messages", messageRoutes);
-app.use("/api", conversationRoutes);
+app.use("/api/messages", messageRoutes);
+app.use("/api/conversations", conversationRoutes);
 
-app.use("/automations", automationRoutes);
+app.use("/api/automations", automationRoutes);
 
 app.get("/", (req, res) => {
   return res.json({
