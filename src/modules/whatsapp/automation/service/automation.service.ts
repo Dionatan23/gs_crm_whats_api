@@ -135,14 +135,21 @@ class AutomationService {
     return new Promise((resolve, reject) => {
       db.run(
         `
-        UPDATE automations
-        SET active = CASE WHEN active = 1 THEN 0 ELSE 1 END
-        WHERE id = ?
-        `,
+          UPDATE automations
+          SET 
+            active = CASE WHEN active = 1 THEN 0 ELSE 1 END,
+            status = CASE WHEN active = 1 THEN 'pausada' ELSE 'ativa' END
+          WHERE id = ?
+          `,
         [id],
-        (err) => {
-          if (err) reject(err);
-          else resolve(true);
+        function (err) {
+          if (err) return reject(err);
+
+          if (this.changes === 0) {
+            return reject(new Error("Nenhuma automação foi atualizada"));
+          }
+
+          resolve(true);
         },
       );
     });
