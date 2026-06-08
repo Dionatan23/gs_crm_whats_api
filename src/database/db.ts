@@ -42,52 +42,64 @@ db.serialize(() => {
   `);
 
   db.run(`
-  CREATE TABLE IF NOT EXISTS automations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    lead_type TEXT NOT NULL,
-    session_id TEXT,
-    status TEXT DEFAULT 'ativa',
-    active INTEGER DEFAULT 1,
-    start_time TEXT,
-    end_time TEXT,
-    daily_limit INTEGER DEFAULT 35,
-    min_delay INTEGER DEFAULT 40,
-    max_delay INTEGER DEFAULT 120,
-    message_template TEXT NOT NULL,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-  )
-`);
+    CREATE TABLE IF NOT EXISTS automations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      lead_type TEXT NOT NULL,
+      session_id TEXT,
+      status TEXT DEFAULT 'ativa',
+      active INTEGER DEFAULT 1,
+      categoria TEXT NOT NULL,
+      start_time TEXT,
+      end_time TEXT,
+      daily_limit INTEGER DEFAULT 35,
+      min_delay INTEGER DEFAULT 40,
+      max_delay INTEGER DEFAULT 120,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 
   db.run(`
-  CREATE TABLE IF NOT EXISTS automation_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    automation_lead_id INTEGER,
-    automation_id INTEGER,
-    phone TEXT,
-    status TEXT,
-    sent_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    error_message TEXT,
-    session_id TEXT
-  )
-`);
+    CREATE TABLE IF NOT EXISTS automation_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      automation_id INTEGER NOT NULL,
+      template_id TEXT,
+      content TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (automation_id) REFERENCES automations(id)
+    )
+  `);
 
   db.run(`
-  CREATE TABLE IF NOT EXISTS automation_leads (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    automation_id INTEGER NOT NULL,
-    lead_name TEXT NOT NULL,
-    company TEXT,
-    lead_type TEXT NOT NULL,
-    city TEXT,
-    phone TEXT NOT NULL,
-    source_status TEXT,
-    execution_status TEXT DEFAULT 'pending',
-    sent_at TEXT,
-    error_message TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-  )
-`);
+    CREATE TABLE IF NOT EXISTS automation_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      automation_lead_id INTEGER,
+      automation_id INTEGER,
+      phone TEXT,
+      status TEXT,
+      sent_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      error_message TEXT,
+      session_id TEXT
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS automation_leads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      automation_id INTEGER NOT NULL,
+      lead_name TEXT NOT NULL,
+      company TEXT,
+      lead_type TEXT NOT NULL,
+      city TEXT,
+      phone TEXT NOT NULL,
+      source_status TEXT,
+      execution_status TEXT DEFAULT 'pending',
+      sent_at TEXT,
+      error_message TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (automation_id) REFERENCES automations(id)
+    )
+  `);
 });
 
 export default db;

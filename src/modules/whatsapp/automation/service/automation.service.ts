@@ -9,43 +9,89 @@ class AutomationService {
   private readonly runningAutomations = new Set<number>();
 
   async create(data: any) {
+    console.log("=== PAYLOAD RECEBIDO ===");
+    console.log(JSON.stringify(data, null, 2));
+
+    console.log("=== TEMPLATES ===");
+    console.log(JSON.stringify(data.templates, null, 2));
     return new Promise((resolve, reject) => {
       db.run(
         `
-        INSERT INTO automations (
-          name,
-          session_id,
-          lead_type,
-          message_template,
-          start_time,
-          end_time,
-          min_delay,
-          max_delay,
-          active
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
+      INSERT INTO automations (
+        name,
+        session_id,
+        lead_type,
+        status,
+        active,
+        categoria,
+        start_time,
+        end_time,
+        daily_limit,
+        min_delay,
+        max_delay
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
         [
           data.name,
           data.session_id,
           data.lead_type,
-          data.message_template,
+          data.status || "ativa",
+          data.active ? 1 : 0,
+          data.categoria,
           data.start_time,
           data.end_time,
+          data.daily_limit || 50,
           data.min_delay,
           data.max_delay,
-          data.active ?? 1,
         ],
         function (err) {
           if (err) return reject(err);
 
           const automationId = this.lastID;
 
-          if (!data.leads?.length) {
-            return resolve({ id: automationId });
+          // salvar templates
+          if (data.templates?.length) {
+            const templateStmt = db.prepare(`
+            INSERT INTO automation_messages (
+              automation_id,
+              template_id,
+              content
+            )
+            VALUES (?, ?, ?)
+          `);
+
+            for (const template of data.templates) {
+              console.log("SALVANDO TEMPLATE:", template);
+              const content =
+                template.mensagem || template.content || template.message;
+
+              if (!content) {
+                console.warn(
+                  "Template ignorado por não possuir conteúdo:",
+                  template,
+                );
+                continue;
+              }
+              console.log("CONTENT:", content);
+              templateStmt.run(
+                [automationId, template.id || null, content],
+                (err) => {
+                  if (err) {
+                    console.error("ERRO TEMPLATE:", err);
+                  } else {
+                    console.log("TEMPLATE SALVO");
+                  }
+                },
+              );
+            }
+
+            templateStmt.finalize();
           }
 
-          const stmt = db.prepare(`
+          // salvar leads
+          if (data.leads?.length) {
+            const leadStmt = db.prepare(`
             INSERT INTO automation_leads (
               automation_id,
               lead_name,
@@ -58,19 +104,20 @@ class AutomationService {
             VALUES (?, ?, ?, ?, ?, ?, ?)
           `);
 
-          for (const lead of data.leads) {
-            stmt.run([
-              automationId,
-              lead.name,
-              lead.company || null,
-              lead.type || data.lead_type,
-              lead.city || null,
-              lead.phone,
-              lead.status || "novo",
-            ]);
-          }
+            for (const lead of data.leads) {
+              leadStmt.run([
+                automationId,
+                lead.name,
+                lead.company || null,
+                data.lead_type,
+                lead.city || null,
+                lead.phone,
+                lead.status || "novo",
+              ]);
+            }
 
-          stmt.finalize();
+            leadStmt.finalize();
+          }
 
           resolve({ id: automationId });
         },
@@ -105,7 +152,6 @@ class AutomationService {
           name = ?,
           session_id = ?,
           lead_type = ?,
-          message_template = ?,
           start_time = ?,
           end_time = ?,
           min_delay = ?,
@@ -116,7 +162,6 @@ class AutomationService {
           data.name,
           data.session_id,
           data.lead_type,
-          data.message_template,
           data.start_time,
           data.end_time,
           data.min_delay,
@@ -163,6 +208,7 @@ class AutomationService {
         if (err) reject(err);
         else resolve(true);
       });
+      db.run(`DELETE FROM automation_messages WHERE automation_id = ?`, [id]);
     });
   }
 
@@ -206,6 +252,25 @@ class AutomationService {
     end.setHours(endHour, endMinute, 0, 0);
 
     return now > end;
+  }
+
+  async getRandomTemplate(automationId: number): Promise<any> {
+    return new Promise((resolve, reject) => {
+      db.get(
+        `
+      SELECT content
+      FROM automation_messages
+      WHERE automation_id = ?
+      ORDER BY RANDOM()
+      LIMIT 1
+      `,
+        [automationId],
+        (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        },
+      );
+    });
   }
 
   isWithinExecutionWindow(automation: any) {
@@ -263,10 +328,18 @@ class AutomationService {
 
           await this.sleep(delay * 1000);
 
+          const template: any = await this.getRandomTemplate(automation.id);
+
+          if (!template) {
+            throw new Error(
+              `Nenhum template encontrado para automação ${automation.id}`,
+            );
+          }
+
           await messageService.sendTextMessage(
             automation.session_id,
             lead.phone,
-            automation.message_template,
+            template.content,
           );
 
           await this.markLeadAsSent(lead.id);
