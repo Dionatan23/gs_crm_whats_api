@@ -17,4 +17,8 @@ router.delete("/campaigns/:id", automationController.delete);
 
 router.get("/campaigns/:id/logs", automationController.logs);
 
+router.get("/campaigns/:id/status", automationController.status);
+
+router.get("/automations/:id/leads", automationController.leads);
+
 export default router;

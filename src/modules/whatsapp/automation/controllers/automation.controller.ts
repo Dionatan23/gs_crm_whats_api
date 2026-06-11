@@ -187,6 +187,63 @@ class AutomationController {
       });
     }
   }
+
+  async status(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+
+      if (isNaN(id)) {
+        return res.status(400).json({
+          success: false,
+          message: "ID inválido",
+        });
+      }
+
+      const status = await automationService.getStatus(id);
+
+      if (!status) {
+        return res.status(404).json({
+          success: false,
+          message: "Automação não encontrada",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: status,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+
+  async leads(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+
+      if (isNaN(id)) {
+        return res.status(400).json({
+          success: false,
+          message: "ID inválido",
+        });
+      }
+
+      const leads = await automationService.getLeads(id);
+
+      return res.status(200).json({
+        success: true,
+        data: leads,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
 }
 
 export default new AutomationController();

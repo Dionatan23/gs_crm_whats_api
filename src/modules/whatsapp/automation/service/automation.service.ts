@@ -300,23 +300,74 @@ class AutomationService {
     try {
       console.log(`🚀 Executando automação ${automation.id}`);
 
-      const leads = await this.getPendingAutomationLeads(automation.id);
+      // =====================================
+      // Libera possíveis leads presos
+      // após reinício do servidor
+      // =====================================
 
-      if (!leads || !(leads as any[]).length) {
+      await this.releaseStuckLeads(automation.id);
+
+      // =====================================
+      // Verifica limite diário
+      // =====================================
+
+      let sentToday = await this.getTodaySentCount(automation.id);
+
+      console.log(`📊 Disparos hoje: ${sentToday}/${automation.daily_limit}`);
+
+      if (sentToday >= automation.daily_limit) {
         console.log(
-          `🏁 Automação ${automation.id} finalizada: sem leads pendentes`,
+          `⛔ Limite diário atingido para automação ${automation.id}`,
         );
 
-        await this.finishAutomation(automation.id);
+        return;
+      }
+
+      // =====================================
+      // Busca apenas leads pendentes
+      // =====================================
+
+      const leads = await this.getPendingAutomationLeads(automation.id);
+
+      // =====================================
+      // Se não existir lead pendente
+      // verifica se realmente terminou
+      // =====================================
+
+      if (!leads || !(leads as any[]).length) {
+        const hasPending = await this.hasPendingLeads(automation.id);
+
+        if (!hasPending) {
+          console.log(
+            `🏁 Automação ${automation.id} finalizada: todos os leads processados`,
+          );
+
+          await this.finishAutomation(automation.id);
+        }
 
         return true;
       }
 
+      // =====================================
+      // Processamento dos leads
+      // =====================================
+
       for (const lead of leads as any[]) {
+        // ==========================
+        // Respeita limite diário
+        // ==========================
+
+        if (sentToday >= automation.daily_limit) {
+          console.log(
+            `⛔ Limite diário atingido durante execução (${sentToday}/${automation.daily_limit})`,
+          );
+
+          break;
+        }
+
         try {
           console.log(`➡️ Reservando lead ${lead.phone}`);
 
-          // trava imediatamente
           await this.markLeadAsProcessing(lead.id);
 
           const delay = this.randomDelay(
@@ -346,7 +397,11 @@ class AutomationService {
 
           await this.logExecution(automation.id, lead.phone, "SUCCESS");
 
-          console.log(`✅ Lead enviado: ${lead.phone}`);
+          sentToday++;
+
+          console.log(
+            `✅ Lead enviado: ${lead.phone} (${sentToday}/${automation.daily_limit})`,
+          );
         } catch (error: any) {
           await this.markLeadAsFailed(lead.id, error.message);
 
@@ -363,10 +418,87 @@ class AutomationService {
           );
         }
       }
+
+      // =====================================
+      // Verifica se ainda existem pendências
+      // =====================================
+
+      const hasPending = await this.hasPendingLeads(automation.id);
+
+      if (!hasPending) {
+        console.log(`🏁 Automação ${automation.id} concluída com sucesso`);
+
+        await this.finishAutomation(automation.id);
+      } else {
+        console.log(
+          `📌 Automação ${automation.id} pausada aguardando próxima execução`,
+        );
+      }
+
       return true;
     } finally {
       this.runningAutomations.delete(automation.id);
     }
+  }
+
+  async getTodaySentCount(automationId: number): Promise<number> {
+    return new Promise((resolve, reject) => {
+      db.get(
+        `
+      SELECT COUNT(*) as total
+      FROM automation_logs
+      WHERE automation_id = ?
+      AND status = 'SUCCESS'
+      AND DATE(sent_at) = DATE('now', 'localtime')
+      `,
+        [automationId],
+        (err, row: any) => {
+          if (err) reject(err);
+          else resolve(row?.total || 0);
+        },
+      );
+    });
+  }
+
+  async hasPendingLeads(automationId: number): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      db.get(
+        `
+      SELECT COUNT(*) as total
+      FROM automation_leads
+      WHERE automation_id = ?
+      AND execution_status IN ('pending', 'processing')
+      `,
+        [automationId],
+        (err, row: any) => {
+          if (err) reject(err);
+          else resolve(row.total > 0);
+        },
+      );
+    });
+  }
+
+  async releaseStuckLeads(automationId: number): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      db.run(
+        `
+      UPDATE automation_leads
+      SET execution_status = 'pending'
+      WHERE automation_id = ?
+      AND execution_status = 'processing'
+      `,
+        [automationId],
+        function (err) {
+          if (err) {
+            reject(err);
+          } else {
+            console.log(`🔄 Leads presos liberados: ${this.changes}`);
+
+            resolve(true);
+          }
+        },
+      );
+    });
   }
 
   async finishAutomation(automationId: number): Promise<boolean> {
@@ -481,6 +613,102 @@ class AutomationService {
 
   sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async getStatus(id: number) {
+    return new Promise((resolve, reject) => {
+      db.get(
+        `
+      SELECT
+        a.id,
+        a.name,
+        a.status,
+        a.active,
+        a.daily_limit,
+
+        COUNT(al.id) as total_leads,
+
+        SUM(
+          CASE
+            WHEN al.execution_status = 'pending'
+            THEN 1 ELSE 0
+          END
+        ) as pending,
+
+        SUM(
+          CASE
+            WHEN al.execution_status = 'processing'
+            THEN 1 ELSE 0
+          END
+        ) as processing,
+
+        SUM(
+          CASE
+            WHEN al.execution_status = 'sent'
+            THEN 1 ELSE 0
+          END
+        ) as sent,
+
+        SUM(
+          CASE
+            WHEN al.execution_status = 'failed'
+            THEN 1 ELSE 0
+          END
+        ) as failed
+
+      FROM automations a
+      LEFT JOIN automation_leads al
+        ON al.automation_id = a.id
+
+      WHERE a.id = ?
+      GROUP BY a.id
+      `,
+        [id],
+        async (err, row: any) => {
+          if (err) return reject(err);
+
+          if (!row) {
+            return resolve(null);
+          }
+
+          const todaySent = await this.getTodaySentCount(id);
+
+          resolve({
+            ...row,
+            today_sent: todaySent,
+          });
+        },
+      );
+    });
+  }
+
+  async getLeads(automationId: number) {
+    return new Promise((resolve, reject) => {
+      db.all(
+        `
+      SELECT
+        id,
+        lead_name,
+        company,
+        lead_type,
+        city,
+        phone,
+        source_status,
+        execution_status,
+        sent_at,
+        error_message,
+        created_at
+      FROM automation_leads
+      WHERE automation_id = ?
+      ORDER BY id ASC
+      `,
+        [automationId],
+        (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        },
+      );
+    });
   }
 }
 
