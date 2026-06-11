@@ -32,9 +32,13 @@ class SchedulerService {
             }
           } else {
             if (automationService.isWindowExpired(automation)) {
-              console.log(`⏰ Automação expirada: ${automation.name}`);
+              console.log(
+                `⏰ Janela de execução encerrada: ${automation.name}`,
+              );
 
-              await automationService.finishAutomation(automation.id);
+              await automationService.pauseAutomation(automation.id);
+
+              continue;
             } else {
               console.log(
                 `⏳ Aguardando janela de execução: ${automation.name}`,

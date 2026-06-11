@@ -178,23 +178,37 @@ class AutomationService {
 
   async toggle(id: number) {
     return new Promise((resolve, reject) => {
-      db.run(
-        `
+      db.get(
+        `SELECT status FROM automations WHERE id = ?`,
+        [id],
+        (err, row: any) => {
+          if (err) return reject(err);
+
+          if (!row) {
+            return reject(new Error("Automação não encontrada"));
+          }
+
+          if (row.status === "concluida") {
+            return reject(
+              new Error("Não é possível reativar uma automação concluída"),
+            );
+          }
+
+          db.run(
+            `
           UPDATE automations
           SET 
             active = CASE WHEN active = 1 THEN 0 ELSE 1 END,
             status = CASE WHEN active = 1 THEN 'pausada' ELSE 'ativa' END
           WHERE id = ?
           `,
-        [id],
-        function (err) {
-          if (err) return reject(err);
+            [id],
+            function (err) {
+              if (err) return reject(err);
 
-          if (this.changes === 0) {
-            return reject(new Error("Nenhuma automação foi atualizada"));
-          }
-
-          resolve(true);
+              resolve(true);
+            },
+          );
         },
       );
     });
@@ -710,6 +724,28 @@ class AutomationService {
       );
     });
   }
+
+  async pauseAutomation(automationId: number): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      db.run(
+        `
+      UPDATE automations
+      SET active = 0,
+          status = 'pausada'
+      WHERE id = ?
+      `,
+        [automationId],
+        function (err) {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(true);
+          }
+        },
+      );
+    });
+  }
+
 }
 
 export const automationService = new AutomationService();
